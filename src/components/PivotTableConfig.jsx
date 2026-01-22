@@ -32,20 +32,8 @@ const PivotTableConfig = ({
 }) => {
   const numericColumns = columns.filter(col => columnTypes[col] === 'number');
 
-  // 获取所有可用于Y轴聚合的列（排除分组维度和日期列）
-  const yAxisColumns = columns.filter(col => {
-    // 排除分组维度
-    if (col === groupBy) return false;
-
-    // 排除日期列（日期列不适合作为Y轴聚合）
-    if (columnTypes[col] === 'date') return false;
-
-    // 包含数字类型
-    if (columnTypes[col] === 'number') return true;
-
-    // 文本类型但可能包含数值数据
-    return true;
-  });
+  // Y轴使用文件的所有列，排除当前选择的X轴分组列
+  const yAxisColumns = columns.filter(col => col !== groupBy);
 
   const categoricalColumns = columns.filter(col => columnTypes[col] !== 'number' && columnTypes[col] !== 'date');
   const dateColumns = columns.filter(col => columnTypes[col] === 'date');
