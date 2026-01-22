@@ -28,8 +28,25 @@ const PivotTableConfig = ({
   setXAxisLabel,
   yAxisLabel,
   setYAxisLabel,
+  data,
 }) => {
   const numericColumns = columns.filter(col => columnTypes[col] === 'number');
+
+  // 获取所有可用于Y轴聚合的列（排除分组维度和日期列）
+  const yAxisColumns = columns.filter(col => {
+    // 排除分组维度
+    if (col === groupBy) return false;
+
+    // 排除日期列（日期列不适合作为Y轴聚合）
+    if (columnTypes[col] === 'date') return false;
+
+    // 包含数字类型
+    if (columnTypes[col] === 'number') return true;
+
+    // 文本类型但可能包含数值数据
+    return true;
+  });
+
   const categoricalColumns = columns.filter(col => columnTypes[col] !== 'number' && columnTypes[col] !== 'date');
   const dateColumns = columns.filter(col => columnTypes[col] === 'date');
 
@@ -113,6 +130,9 @@ const PivotTableConfig = ({
               <option key={col} value={col}>{col}</option>
             ))}
           </select>
+          {dateColumns.length === 0 && categoricalColumns.length === 0 && (
+            <p className="text-xs text-gray-500 mt-1">没有可分组的列</p>
+          )}
         </div>
 
         <div>
@@ -123,14 +143,16 @@ const PivotTableConfig = ({
             value={aggregateBy}
             onChange={(e) => setAggregateBy(e.target.value)}
             className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white"
-            disabled={numericColumns.length === 0}
+            disabled={yAxisColumns.length === 0}
           >
             <option value="">选择数值列</option>
-            {numericColumns.map(col => (
-              <option key={col} value={col}>{col} 📊</option>
+            {yAxisColumns.map(col => (
+              <option key={col} value={col}>
+                {col} {columnTypes[col] === 'number' ? '📊' : '📝'}
+              </option>
             ))}
           </select>
-          {numericColumns.length === 0 && (
+          {yAxisColumns.length === 0 && (
             <p className="text-xs text-gray-500 mt-1">没有数值列可供选择</p>
           )}
         </div>

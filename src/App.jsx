@@ -51,16 +51,19 @@ function App() {
       setCustomXAxisLabel('');
       setCustomYAxisLabel('');
 
+      // 优先选择日期列作为X轴
       const dateColumns = Object.keys(types).filter(col => types[col] === 'date');
       if (dateColumns.length > 0) {
         setGroupBy(dateColumns[0]);
       }
 
+      // 选择数值列作为Y轴
       const numericColumns = Object.keys(types).filter(col => types[col] === 'number');
       if (numericColumns.length > 0) {
         setAggregateBy(numericColumns[0]);
       }
 
+      // 如果没有日期列，选择分类列作为X轴
       if (dateColumns.length === 0) {
         const categoricalColumns = Object.keys(types).filter(col => types[col] !== 'number');
         if (categoricalColumns.length > 0) {
@@ -186,6 +189,7 @@ function App() {
               <PivotTableConfig
                 columns={columns}
                 columnTypes={columnTypes}
+                data={data}
                 groupBy={groupBy}
                 setGroupBy={setGroupBy}
                 aggregateBy={aggregateBy}
