@@ -57,6 +57,27 @@ const ChartDisplay = ({
   const chartRef = useRef(null);
   const colors = useMemo(() => getColorScheme(chartColor), [chartColor]);
 
+  const stats = useMemo(() => {
+    if (!data || data.length === 0) return null;
+
+    const values = data.map(item => parseFloat(item[aggregateBy] || 0));
+    const sum = values.reduce((a, b) => a + b, 0);
+    const avg = sum / values.length;
+    const max = Math.max(...values);
+    const min = Math.min(...values);
+
+    return { sum, avg, max, min, count: values.length };
+  }, [data, aggregateBy]);
+
+  const chartData = useMemo(() => {
+    if (!data || data.length === 0) return [];
+    return data.map((item, index) => ({
+      name: item[groupBy],
+      value: parseFloat(item[aggregateBy]),
+      fill: colors[index % colors.length],
+    }));
+  }, [data, groupBy, aggregateBy, colors]);
+
   if (!data || data.length === 0) {
     return (
       <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-12 text-center border-2 border-dashed border-gray-300">
@@ -106,12 +127,6 @@ const ChartDisplay = ({
     };
     return positions[labelPosition] || positions.auto;
   };
-
-  const chartData = data.map((item, index) => ({
-    name: item[groupBy],
-    value: parseFloat(item[aggregateBy]),
-    fill: colors[index % colors.length],
-  }));
 
   const commonMargin = { top: 40, right: 40, left: 80, bottom: 80 };
   const commonProps = {
@@ -402,18 +417,6 @@ const ChartDisplay = ({
         return <BarChart2 className="w-6 h-6" />;
     }
   };
-
-  const stats = useMemo(() => {
-    if (!data.length) return null;
-
-    const values = data.map(item => parseFloat(item[aggregateBy] || 0));
-    const sum = values.reduce((a, b) => a + b, 0);
-    const avg = sum / values.length;
-    const max = Math.max(...values);
-    const min = Math.min(...values);
-
-    return { sum, avg, max, min, count: values.length };
-  }, [data, aggregateBy]);
 
   return (
     <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
