@@ -1,5 +1,5 @@
 import React from 'react';
-import { Settings, Filter, Palette, Sliders, Calendar3 } from 'lucide-react';
+import { Settings, Filter, Palette, Sliders, Calendar } from 'lucide-react';
 
 const PivotTableConfig = ({
   columns,
@@ -156,7 +156,7 @@ const PivotTableConfig = ({
           <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
             <label className="block text-sm font-semibold text-gray-700 mb-2">
               <div className="flex items-center gap-2">
-                <Calendar3 className="w-4 h-4 text-blue-600" />
+                <Calendar className="w-4 h-4 text-blue-600" />
                 日期分组方式
               </div>
             </label>
