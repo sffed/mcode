@@ -9,7 +9,7 @@ export const parseExcel = (file) => {
         const workbook = XLSX.read(data, { type: 'array' });
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false });
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false, dateNF: 'yyyy-mm-dd' });
 
         const columns = jsonData.length > 0 ? Object.keys(jsonData[0]) : [];
         resolve({ data: jsonData, columns });
@@ -29,18 +29,18 @@ export const detectColumnType = (columnName, data) => {
 
   if (values.length === 0) return 'string';
 
-  const numericCount = values.filter(val => !isNaN(parseFloat(val))).length;
+  const numericCount = values.filter(val => !isNaN(parseFloat(val)) && !isNaN(parseFloat(val).toString())).length;
   const numericRatio = numericCount / values.length;
 
   if (numericRatio > 0.8) return 'number';
 
   const dateCount = values.filter(val => {
-    const date = new Date(val);
-    return !isNaN(date.getTime());
+    const date = parseDate(val);
+    return date !== null;
   }).length;
   const dateRatio = dateCount / values.length;
 
-  if (dateRatio > 0.8) return 'date';
+  if (dateRatio > 0.6) return 'date';
 
   return 'string';
 };
@@ -53,43 +53,43 @@ export const groupAndAggregate = (data, groupBy, aggregateBy, aggregateFunc = 's
     const aggregateValue = parseFloat(row[aggregateBy]) || 0;
 
     if (!grouped[groupValue]) {
-      grouped[groupValue] = 0;
-    }
-
-    switch (aggregateFunc) {
-      case 'sum':
-        grouped[groupValue] += aggregateValue;
-        break;
-      case 'count':
-        grouped[groupValue] += 1;
-        break;
-      case 'avg':
-        grouped[groupValue] = {
-          sum: (grouped[groupValue].sum || 0) + aggregateValue,
-          count: (grouped[groupValue].count || 0) + 1,
-        };
-        break;
-      case 'max':
-        grouped[groupValue] = Math.max(grouped[groupValue], aggregateValue);
-        break;
-      case 'min':
-        grouped[groupValue] = Math.min(grouped[groupValue], aggregateValue);
-        break;
-      default:
-        grouped[groupValue] += aggregateValue;
-    }
-  });
-
-  let result = Object.entries(grouped).map(([key, value]) => {
-    if (aggregateFunc === 'avg') {
-      return {
-        [groupBy]: key,
-        [aggregateBy]: (value.sum / value.count).toFixed(2),
+      grouped[groupValue] = {
+        sum: 0,
+        count: 0,
+        values: [],
       };
     }
+
+    grouped[groupValue].values.push(aggregateValue);
+    grouped[groupValue].sum += aggregateValue;
+    grouped[groupValue].count += 1;
+  });
+
+  let result = Object.entries(grouped).map(([key, metrics]) => {
+    let aggregatedValue;
+    switch (aggregateFunc) {
+      case 'sum':
+        aggregatedValue = metrics.sum;
+        break;
+      case 'avg':
+        aggregatedValue = metrics.sum / metrics.count;
+        break;
+      case 'count':
+        aggregatedValue = metrics.count;
+        break;
+      case 'max':
+        aggregatedValue = Math.max(...metrics.values);
+        break;
+      case 'min':
+        aggregatedValue = Math.min(...metrics.values);
+        break;
+      default:
+        aggregatedValue = metrics.sum;
+    }
+
     return {
       [groupBy]: key,
-      [aggregateBy]: aggregateFunc === 'count' ? value : value.toFixed(2),
+      [aggregateBy]: aggregatedValue.toFixed(2),
     };
   });
 
@@ -106,22 +106,35 @@ export const aggregateByDate = (data, dateColumn, valueColumn, aggregateFunc = '
   const grouped = {};
 
   data.forEach(row => {
-    const date = new Date(row[dateColumn]);
-    if (isNaN(date.getTime())) return;
+    const date = parseDate(row[dateColumn]);
+    if (!date) return;
 
     let groupKey;
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
+
     switch (timeGroup) {
       case 'year':
-        groupKey = date.getFullYear().toString();
+        groupKey = `${year}`;
+        break;
+      case 'quarter':
+        const quarter = Math.ceil(month / 3);
+        groupKey = `${year}-Q${quarter}`;
         break;
       case 'month':
-        groupKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        groupKey = `${year}-${String(month).padStart(2, '0')}`;
+        break;
+      case 'week':
+        const startDate = new Date(date);
+        startDate.setDate(date.getDate() - date.getDay());
+        const endDate = new Date(startDate);
+        endDate.setDate(startDate.getDate() + 6);
+        groupKey = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${String(startDate.getDate()).padStart(2, '0')} 至 ${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`;
         break;
       case 'day':
-        groupKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-        break;
       default:
-        groupKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        groupKey = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     }
 
     const value = parseFloat(row[valueColumn]) || 0;
@@ -163,7 +176,11 @@ export const aggregateByDate = (data, dateColumn, valueColumn, aggregateFunc = '
     };
   });
 
-  result.sort((a, b) => new Date(a[dateColumn]) - new Date(b[dateColumn]));
+  result.sort((a, b) => {
+    const dateA = a[dateColumn].split(' 至 ')[0];
+    const dateB = b[dateColumn].split(' 至 ')[0];
+    return new Date(dateA) - new Date(dateB);
+  });
 
   return result;
 };
@@ -172,7 +189,24 @@ export const parseDate = (dateValue) => {
   if (!dateValue) return null;
 
   let date;
+
   if (typeof dateValue === 'string') {
+    const formats = [
+      /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/,
+      /^(\d{4})-(\d{1,2})-(\d{1,2})T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?$/,
+      /^(\d{4})年(\d{1,2})月(\d{1,2})日$/,
+    ];
+
+    for (const format of formats) {
+      const match = dateValue.match(format);
+      if (match) {
+        date = new Date(match[1], match[2] - 1, match[3]);
+        if (!isNaN(date.getTime())) {
+          return date;
+        }
+      }
+    }
+
     date = new Date(dateValue);
   } else if (typeof dateValue === 'number') {
     date = new Date(Math.round((dateValue - 25569) * 86400 * 1000));
@@ -190,7 +224,7 @@ export const parseDate = (dateValue) => {
 export const formatDate = (date, format = 'YYYY-MM-DD') => {
   if (!date) return '';
 
-  const d = new Date(date);
+  const d = typeof date === 'string' ? new Date(date) : date;
   if (isNaN(d.getTime())) return '';
 
   const year = d.getFullYear();
@@ -201,4 +235,12 @@ export const formatDate = (date, format = 'YYYY-MM-DD') => {
     .replace('YYYY', year)
     .replace('MM', month)
     .replace('DD', day);
+};
+
+export const getWeekNumber = (date) => {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
 };
