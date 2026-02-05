@@ -12,15 +12,49 @@ export const parseExcel = (file) => {
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false });
 
         const columns = jsonData.length > 0 ? Object.keys(jsonData[0]) : [];
-        console.log('解析后的数据样本:', jsonData.slice(0, 3));
+        
+        const processedData = normalizeDateColumns(jsonData, columns);
+        
+        console.log('解析后的数据样本:', processedData.slice(0, 3));
         console.log('检测到的列:', columns);
-        resolve({ data: jsonData, columns });
+        resolve({ data: processedData, columns });
       } catch (error) {
         reject(error);
       }
     };
     reader.onerror = reject;
     reader.readAsArrayBuffer(file);
+  });
+};
+
+export const normalizeDateColumns = (data, columns) => {
+  const dateKeywords = ['日期', '时间', 'date', 'time', 'day', 'month', 'year'];
+  const dateColumns = columns.filter(col => 
+    dateKeywords.some(keyword => 
+      col.toLowerCase().includes(keyword.toLowerCase())
+    )
+  );
+
+  if (dateColumns.length === 0) {
+    return data;
+  }
+
+  console.log('识别到的日期列:', dateColumns);
+
+  return data.map(row => {
+    const newRow = { ...row };
+    dateColumns.forEach(col => {
+      const originalValue = row[col];
+      const date = parseDate(originalValue);
+      if (date && !isNaN(date.getTime())) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        newRow[col] = `${year}-${month}-${day}`;
+        console.log(`列 "${col}" 转换: ${originalValue} -> ${newRow[col]}`);
+      }
+    });
+    return newRow;
   });
 };
 
@@ -212,48 +246,37 @@ export const parseDate = (dateValue) => {
   let date;
 
   if (typeof dateValue === 'string') {
-    // 检查各种日期格式
     const formats = [
-      // 2024-01-01
       /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/,
-      // 2024-01-01T12:00:00Z
       /^(\d{4})-(\d{1,2})-(\d{1,2})T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?$/,
-      // 2024年1月1日
       /^(\d{4})年(\d{1,2})月(\d{1,2})日$/,
-      // 01/01/2024 或 01-01-2024
       /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/,
-      // 2024/01/01 或 2024.01.01
       /^(\d{4})[/.](\d{1,2})[/.](\d{1,2})$/,
-      // 2024-1-1
-      /^(\d{4})-(\d{1})-(\d{1})$/,
     ];
 
     for (const format of formats) {
       const match = dateValue.match(format);
       if (match) {
-        // 根据不同的格式解析
         if (format.test(/^\d{4}/)) {
-          // YYYY-MM-DD 格式
           date = new Date(match[1], match[2] - 1, match[3]);
         } else {
-          // DD-MM-YYYY 格式
           date = new Date(match[3], match[2] - 1, match[1]);
         }
 
         if (!isNaN(date.getTime())) {
+          console.log(`日期字符串解析成功: "${dateValue}" -> ${date}`);
           return date;
         }
       }
     }
 
-    // 尝试直接解析
     date = new Date(dateValue);
   } else if (typeof dateValue === 'number') {
-    // Excel 日期数字格式 (从 1900-01-01 开始)
     if (dateValue > 25569) {
-      date = new Date(Math.round((dateValue - 25569) * 86400 * 1000));
+      const excelDate = new Date(Math.round((dateValue - 25569) * 86400 * 1000));
+      console.log(`Excel数字日期解析: ${dateValue} -> ${excelDate}`);
+      date = excelDate;
     } else {
-      // 可能是较小的数字年份
       date = new Date(dateValue);
     }
   } else {
@@ -261,6 +284,7 @@ export const parseDate = (dateValue) => {
   }
 
   if (isNaN(date.getTime())) {
+    console.log(`日期解析失败: ${dateValue}`);
     return null;
   }
 
